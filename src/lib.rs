@@ -6,6 +6,7 @@
 pub mod async_functions;
 
 mod pair;
+pub mod parse_policy;
 pub mod parsed_line;
 pub mod parser;
 pub mod policies;

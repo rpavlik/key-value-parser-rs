@@ -6,55 +6,12 @@
 
 use std::fmt::Debug;
 
-use crate::{MayContainKeyValuePair, MayContainKeyValuePairOrKeylessLine};
+use crate::{
+    parse_policy::{ParsePolicy, ProcessedContinuationValue, ProcessedValue},
+    MayContainKeyValuePair, MayContainKeyValuePairOrKeylessLine,
+};
 
 use super::{parsed_line::ParsedLine, KeyValuePair};
-
-/// Enum returned by a [TagValueParsePolicy] when processing a value.
-pub enum ProcessedValue<'a> {
-    /// Indicates that the provided value is complete and not continued on the following line.
-    ///
-    /// The data in this variant should have any multi-line decoration stripped.
-    CompleteValue(&'a str),
-    /// Indicates that the provided value is not complete, and that
-    /// additional lines should be processed before terminating this key: value pair.
-    /// If there is a value in this variant, it will be added as the first line in the overall pair value.
-    ///
-    /// The data in this variant should have any multi-line decoration stripped.
-    StartOfMultiline(Option<&'a str>),
-}
-
-/// Enum returned by a [TagValueParsePolicy] when processing a continuation line for a multi-line value.
-pub enum ProcessedContinuationValue<'a> {
-    /// Indicates that the provided value is not complete, and that
-    /// additional lines should be processed before terminating this key: value pair.
-    /// If there is a value in this variant, it will be added as a line to the overall pair value.
-    ///
-    /// The data in this variant should have any multi-line decoration stripped.
-    ContinueMultiline(Option<&'a str>),
-    /// Indicates that the provided value terminates the multi-line value.
-    /// If there is a value in this variant, it will be added as a line to the overall pair value.
-    ///
-    /// The data in this variant should have any multi-line decoration stripped.
-    FinishMultiline(Option<&'a str>),
-}
-
-/// Implement this policy to customize how [KVParser] works, mainly regarding multi-line values.
-pub trait TagValueParsePolicy {
-    /// Called when a key and value are parsed.
-    ///
-    /// Allows you to trim the value, as well as report
-    /// that it is only the beginning of a multi-line value.
-    fn process_value<'a>(&self, key: &str, value: &'a str) -> ProcessedValue<'a>;
-    /// Called with each new line once [TagValueParsePolicy::process_value] returns
-    /// [ProcessedValue::StartOfMultiline], to possibly trim or drop the line, and indicate
-    /// when the multi-line value has finished.
-    fn process_continuation<'a>(
-        &self,
-        key: &str,
-        continuation_line: &'a str,
-    ) -> ProcessedContinuationValue<'a>;
-}
 
 #[derive(Debug, Clone)]
 enum State {
@@ -78,6 +35,16 @@ pub enum Output {
 impl Default for Output {
     fn default() -> Self {
         Output::EmptyLine
+    }
+}
+
+impl From<ParsedLine> for Output {
+    fn from(v: ParsedLine) -> Self {
+        match v {
+            ParsedLine::EmptyLine => Self::EmptyLine,
+            ParsedLine::KeylessLine(v) => Self::KeylessLine(v),
+            ParsedLine::Pair(v) => Self::Pair(v),
+        }
     }
 }
 
@@ -124,32 +91,55 @@ impl MayContainKeyValuePairOrKeylessLine for Output {
     }
 }
 
-/// The combination of possibly a key-value pair, plus the line number just processed
-#[derive(Debug, Clone, PartialEq)]
-pub struct OutputAndLine {
-    pub output: Output,
-    pub line_number: usize,
+/// Wraps a value to add a line number field, which is typically the *last* line associated with a value.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineNumber<T> {
+    line_number: usize,
+    value: T,
 }
 
-impl MayContainKeyValuePair for OutputAndLine {
+impl<T> LineNumber<T> {
+    /// Create from a value and a line number.
+    pub fn new(line_number: usize, value: T) -> Self {
+        Self { line_number, value }
+    }
+
+    /// Unwrap the inner value
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+
+    /// Get the line number
+    pub fn line_number(&self) -> usize {
+        self.line_number
+    }
+
+    /// Get the value
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T: MayContainKeyValuePair> MayContainKeyValuePair for LineNumber<T> {
     fn is_pair(&self) -> bool {
-        self.output.is_pair()
+        self.value.is_pair()
     }
 
     fn pair(self) -> Option<KeyValuePair> {
-        self.output.pair()
+        self.value.pair()
     }
 }
-impl MayContainKeyValuePairOrKeylessLine for OutputAndLine {
+
+impl<T: MayContainKeyValuePairOrKeylessLine> MayContainKeyValuePairOrKeylessLine for LineNumber<T> {
     fn pair_or_err_on_keyless<E>(self, err: E) -> Result<Option<KeyValuePair>, E> {
-        self.output.pair_or_err_on_keyless(err)
+        self.value.pair_or_err_on_keyless(err)
     }
 
     fn pair_or_else_err_on_keyless<E, F: FnOnce() -> E>(
         self,
         err: F,
     ) -> Result<Option<KeyValuePair>, E> {
-        self.output.pair_or_else_err_on_keyless(err)
+        self.value.pair_or_else_err_on_keyless(err)
     }
 }
 
@@ -166,7 +156,8 @@ pub struct KVParser<P> {
     value_lines: Vec<String>,
 }
 
-impl<P: TagValueParsePolicy> KVParser<P> {
+impl<P: ParsePolicy> KVParser<P> {
+    /// Create a parser state wrapping a parse policy.
     pub fn new(policy: P) -> Self {
         Self {
             state: State::Ready,
@@ -181,7 +172,12 @@ impl<P: TagValueParsePolicy> KVParser<P> {
             self.value_lines.push(value.to_string())
         }
     }
-    pub fn process_line(&mut self, line: &str) -> OutputAndLine {
+
+    /// Pass a line to process and advance the state of the parser.
+    ///
+    /// If a complete key: value pair is now available, it will
+    /// be found in the return value.
+    pub fn process_line(&mut self, line: &str) -> LineNumber<Output> {
         self.line_num += 1;
 
         // Match on our current state to compute our output.
@@ -226,14 +222,11 @@ impl<P: TagValueParsePolicy> KVParser<P> {
             Output::KeylessLine(_) => State::Ready,
             Output::Pair(_) => State::Ready,
         };
-        OutputAndLine {
-            output,
-            line_number: self.line_num,
-        }
+        LineNumber::new(self.line_num, output)
     }
 }
 
-impl<P: TagValueParsePolicy + Debug + Default> Default for KVParser<P> {
+impl<P: ParsePolicy + Debug + Default> Default for KVParser<P> {
     fn default() -> Self {
         Self::new(P::default())
     }
@@ -242,45 +235,42 @@ impl<P: TagValueParsePolicy + Debug + Default> Default for KVParser<P> {
 #[cfg(test)]
 mod test {
 
+    use crate::parse_policy::ParsePolicy;
     use crate::policies::SPDXParsePolicy;
     use crate::policies::TrivialParsePolicy;
     use crate::MayContainKeyValuePair;
 
     use super::KVParser;
     use super::KeyValuePair;
+    use super::LineNumber;
     use super::Output;
-    use super::OutputAndLine;
-    use super::TagValueParsePolicy;
 
     #[test]
     fn basics() {
-        fn test_parser<P: TagValueParsePolicy>(mut parser: KVParser<P>) {
+        fn test_parser<P: ParsePolicy>(mut parser: KVParser<P>) {
             assert_eq!(
                 parser.process_line("key1: value1"),
-                OutputAndLine {
-                    output: Output::Pair(KeyValuePair {
+                LineNumber::new(
+                    1,
+                    Output::Pair(KeyValuePair {
                         key: "key1".to_string(),
                         value: "value1".to_string(),
-                    }),
-                    line_number: 1
-                }
+                    })
+                )
             );
             assert_eq!(
                 parser.process_line(" "),
-                OutputAndLine {
-                    output: Output::EmptyLine,
-                    line_number: 2
-                }
+                LineNumber::new(2, Output::EmptyLine)
             );
             assert_eq!(
                 parser.process_line("key2: value2"),
-                OutputAndLine {
-                    output: Output::Pair(KeyValuePair {
+                LineNumber::new(
+                    3,
+                    Output::Pair(KeyValuePair {
                         key: "key2".to_string(),
                         value: "value2".to_string(),
-                    }),
-                    line_number: 3
-                }
+                    })
+                )
             );
         }
         let parser: KVParser<TrivialParsePolicy> = KVParser::default();
@@ -310,7 +300,7 @@ mod test {
         let mut parser: KVParser<SPDXParsePolicy> = KVParser::default();
         assert!(parser.process_line("key: <text>value").pair().is_none());
 
-        assert_eq!(parser.process_line("").output, Output::ValuePending);
+        assert_eq!(parser.process_line("").into_inner(), Output::ValuePending);
         assert_eq!(
             parser.process_line("value</text>").pair().unwrap(),
             KeyValuePair {
@@ -321,6 +311,6 @@ value"
                     .to_string(),
             }
         );
-        assert_eq!(parser.process_line("").output, Output::EmptyLine);
+        assert_eq!(parser.process_line("").into_inner(), Output::EmptyLine);
     }
 }

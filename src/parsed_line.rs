@@ -11,7 +11,7 @@ use crate::pair::{KeyValuePair, MayContainKeyValuePair, MayContainKeyValuePairOr
 /// Does not handle any kind of multi-line values.
 /// The multi-line version of this is [Output].
 ///
-/// [Output]: crate::key_value_parser::Output
+/// [Output]: crate::parser::Output
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedLine {
     /// A line that is empty or only whitespace
