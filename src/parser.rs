@@ -53,6 +53,11 @@ impl<P: ParsePolicy> KVParser<P> {
         KeyValuePair { key, value }
     }
 
+    /// The number of lines that we have processed.
+    pub fn lines_processed(&self) -> usize {
+        self.line_num
+    }
+
     /// Pass a line to process and advance the state of the parser.
     ///
     /// If a complete key: value pair is now available, it will
@@ -99,6 +104,18 @@ impl<P: ParsePolicy> KVParser<P> {
             State::Ready
         };
         LineNumber::new(self.line_num, output)
+    }
+
+    /// Take the pending key: value pair, if any, and treat it as having completed.
+    /// For example, this may be useful at the end of input.
+    pub fn take_pending_pair(&mut self) -> Option<KeyValuePair> {
+        match &self.state {
+            State::Ready => None,
+            State::AwaitingCloseText => {
+                self.state = State::Ready;
+                Some(self.take_pending())
+            }
+        }
     }
 }
 
