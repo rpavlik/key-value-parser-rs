@@ -3,14 +3,16 @@ pub mod emitters;
 //
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-#[cfg(futures)]
+#[cfg_attr(feature = "async",)]
 pub mod async_functions;
+
+#[cfg_attr(feature = "std",)]
+pub mod record;
 
 pub mod parse_policy;
 pub mod parsed_line;
 pub mod parser;
 pub mod policies;
-pub mod record;
 pub mod record_emitter;
 mod types;
 
