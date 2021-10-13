@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::{
-    parse_policy::ParsePolicy, parser, record_emitter::RecordEmitter, KVParser, KeyValuePair,
-    LineNumber, Output,
+    parse_policy::ParsePolicy, record_emitter::RecordEmitter, KVParser, KeyValuePair, LineNumber,
+    Output,
 };
 
 /// An error from operations on a Record
@@ -109,7 +109,7 @@ impl Record {
 
 impl From<Output<Vec<KeyValuePair>>> for Output<Record> {
     fn from(v: Output<Vec<KeyValuePair>>) -> Self {
-        v.map(|fields| Record::new(fields))
+        v.map(Record::new)
     }
 }
 

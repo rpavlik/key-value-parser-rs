@@ -115,19 +115,11 @@ pub enum Output<T> {
 impl<T> Output<T> {
     /// true if the value is [Output::Output]
     pub fn is_some(&self) -> bool {
-        if let Output::Output(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Output::Output(_))
     }
     /// true if the value is [Output::Pending]
     pub fn is_pending(&self) -> bool {
-        if let Output::Pending = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Output::Pending)
     }
 
     /// Apply a function to the contained value in the [Output::Output] variant,
