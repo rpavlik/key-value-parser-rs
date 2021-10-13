@@ -4,6 +4,8 @@
 
 //! Details that only affect those implementing a policy for [KVParser](crate::KVParser)
 
+use std::fmt::Debug;
+
 /// Enum returned by a [ParsePolicy] when processing a value.
 pub enum ProcessedValue<'a> {
     /// Indicates that the provided value is complete and not continued on the following line.
@@ -37,7 +39,7 @@ pub enum ProcessedContinuationValue<'a> {
 /// mainly regarding multi-line values.
 ///
 /// Bundled policies are in [crate::policies]
-pub trait ParsePolicy {
+pub trait ParsePolicy: Debug {
     /// Called when a key and value are parsed.
     ///
     /// Allows you to trim the value, as well as report
@@ -45,7 +47,7 @@ pub trait ParsePolicy {
     fn process_value<'a>(&self, key: &str, value: &'a str) -> ProcessedValue<'a>;
     /// Called with each new line once [ParsePolicy::process_value] returns
     /// [ProcessedValue::StartOfMultiline].
-    /// 
+    ///
     /// Allows you to possibly trim or drop the line, and indicate
     /// when the multi-line value has finished.
     fn process_continuation<'a>(

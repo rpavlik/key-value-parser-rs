@@ -2,7 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::KeyValuePair;
+use crate::{
+    parse_policy::ParsePolicy,
+    parser::{self, LineNumber},
+    KVParser, KeyValuePair,
+};
 
 /// An error from operations on a Record
 #[derive(Debug, thiserror::Error)]
@@ -23,7 +27,7 @@ pub enum RecordError {
     Message(String),
 }
 
-/// An order collection of key-value pairs with no (unescaped) blank lines between.
+/// An ordered collection of key-value pairs with no (unescaped) blank lines between.
 pub struct Record(Vec<KeyValuePair>);
 
 impl Default for Record {
@@ -89,6 +93,91 @@ impl Record {
                 }
             }
             None => Err(RecordError::MissingField(key.to_string())),
+        }
+    }
+}
+
+/// The output of processing a line of input in [RecordParser]
+#[derive(Debug, Clone, PartialEq)]
+pub enum RecordOutput {
+    /// The provided line was empty or whitespace-only.
+    EmptyLine,
+    /// We are in the middle of a multi-line value
+    ValuePending,
+    /// We are in the middle of a record, between values.
+    RecordPending,
+    /// The provided line had no key, but was not part of a multi-line value
+    KeylessLine(String),
+    /// The provided line completes a record
+    Record(Vec<KeyValuePair>),
+}
+
+impl From<parser::Output> for RecordOutput {
+    fn from(v: parser::Output) -> Self {
+        match v {
+            parser::Output::EmptyLine => Self::EmptyLine,
+            parser::Output::ValuePending => Self::ValuePending,
+            parser::Output::KeylessLine(v) => Self::KeylessLine(v),
+            parser::Output::Pair(_) => Self::RecordPending,
+        }
+    }
+}
+
+/// Parses key-value pairs that are grouped in blank-line-separated "records"
+#[derive(Debug)]
+pub struct RecordParser<P: ParsePolicy> {
+    inner: KVParser<P>,
+    fields: Vec<KeyValuePair>,
+}
+
+impl<P: ParsePolicy> RecordParser<P> {
+    /// Create a new record parser, wrapping the provided parser.
+    pub fn new(inner: KVParser<P>) -> Self {
+        Self {
+            inner,
+            fields: vec![],
+        }
+    }
+
+    /// Pass a line to process and advance the state of the parser.
+    ///
+    /// If a record has finished is now available, it will
+    /// be found in the return value.
+    pub fn process_line(&mut self, line: &str) -> LineNumber<RecordOutput> {
+        let (line_number, output) = self.inner.process_line(line).into_tuple();
+
+        let output = match output {
+            parser::Output::EmptyLine => {
+                if self.fields.is_empty() {
+                    RecordOutput::EmptyLine
+                } else {
+                    RecordOutput::Record(std::mem::take(&mut self.fields))
+                }
+            }
+            parser::Output::ValuePending => RecordOutput::ValuePending,
+            parser::Output::KeylessLine(v) => RecordOutput::KeylessLine(v),
+            parser::Output::Pair(v) => {
+                self.fields.push(v);
+                RecordOutput::RecordPending
+            }
+        };
+        LineNumber::new(line_number, output)
+    }
+
+    /// End the input and return any record in progress
+    pub fn end_input(&mut self) -> RecordOutput {
+        self.process_line("").into_inner()
+    }
+}
+
+impl<P: ParsePolicy> RecordParser<P>
+where
+    KVParser<P>: Default,
+{
+    pub fn default() -> Self {
+        Self {
+            inner: KVParser::default(),
+            fields: vec![],
         }
     }
 }

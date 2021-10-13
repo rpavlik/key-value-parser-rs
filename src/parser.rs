@@ -118,6 +118,10 @@ impl<T> LineNumber<T> {
     pub fn value(&self) -> &T {
         &self.value
     }
+
+    pub fn into_tuple(self) -> (usize, T) {
+        (self.line_number, self.value)
+    }
 }
 
 impl<T: MayContainKeyValuePair> MayContainKeyValuePair for LineNumber<T> {
