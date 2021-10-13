@@ -4,7 +4,7 @@
 
 //! Details that only affect those implementing a policy for [KVParser](crate::KVParser)
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 /// Enum returned by a [ParsePolicy] when processing a value.
 pub enum ProcessedValue<'a> {

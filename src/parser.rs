@@ -4,7 +4,7 @@
 
 //! Process lines incrementally to get key: value pairs using [KVParser]
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use crate::{
     parse_policy::{ParsePolicy, ProcessedContinuationValue, ProcessedValue},
@@ -46,6 +46,12 @@ impl<P: ParsePolicy> KVParser<P> {
             self.value_lines.push(value.to_string())
         }
     }
+    fn take_pending(&mut self) -> KeyValuePair {
+        let value = self.value_lines.join("\n");
+        self.value_lines.clear();
+        let key = core::mem::take(&mut self.pending_key);
+        KeyValuePair { key, value }
+    }
 
     /// Pass a line to process and advance the state of the parser.
     ///
@@ -82,10 +88,7 @@ impl<P: ParsePolicy> KVParser<P> {
                     }
                     ProcessedContinuationValue::FinishMultiline(maybe_value) => {
                         self.maybe_push_value_line(maybe_value);
-                        let value = self.value_lines.join("\n");
-                        self.value_lines.clear();
-                        let key = std::mem::take(&mut self.pending_key);
-                        Output::Output(KeyValuePair { key, value })
+                        Output::Output(self.take_pending())
                     }
                 }
             }

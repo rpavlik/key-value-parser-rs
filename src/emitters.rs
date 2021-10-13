@@ -14,7 +14,7 @@ impl BlankLineRecordEmitter {
         if self.fields.is_empty() {
             Output::EmptyLine
         } else {
-            Output::Output(std::mem::take(&mut self.fields))
+            Output::Output(core::mem::take(&mut self.fields))
         }
     }
 }
