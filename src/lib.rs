@@ -1,14 +1,14 @@
-pub mod emitters;
 // Copyright 2021, Collabora, Ltd.
 //
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-#[cfg_attr(feature = "async",)]
-pub mod async_functions;
+// #[cfg(feature = "async")]
+// pub mod async_functions;
 
-#[cfg_attr(feature = "std",)]
+#[cfg(feature = "std")]
 pub mod record;
 
+pub mod emitters;
 pub mod parse_policy;
 pub mod parsed_line;
 pub mod parser;
