@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2021, Collabora, Ltd.
+# SPDX-License-Identifier: CC0-1.0
+
+[package]
+categories = ["parser-implementations"]
+description = "Parse content that looks like key: value in a line-by-line way."
+edition = "2018"
+license = "MIT OR Apache-2.0"
+name = "key-value-parser"
+repository = "https://github.com/rpavlik/key-value-parser-rs/"
+version = "0.1.0"
+
+[dependencies]
+futures = {version = "0.3.17", optional = true}
+thiserror = "1.0.30"

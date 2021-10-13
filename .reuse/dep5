@@ -1,0 +1,10 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: key-value-parser-rs
+Upstream-Contact: Ryan Pavlik <ryan.pavlik@collabora.com>
+Source: https://github.com/rpavlik/key-value-parser-rs/
+
+# Sample paragraph, commented out:
+#
+# Files: src/*
+# Copyright: $YEAR $NAME <$CONTACT>
+# License: ...
